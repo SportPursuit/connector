@@ -27,7 +27,7 @@ from openerp.osv import orm, fields
 from openerp.tools import DEFAULT_SERVER_DATETIME_FORMAT
 from openerp.tools.translate import _
 
-from .job import STATES, DONE, PENDING, OpenERPJobStorage
+from .job import STATES, DONE, PENDING, ENQUEUED, STARTED, OpenERPJobStorage
 from .worker import WORKER_TIMEOUT
 from ..session import ConnectorSession
 from .worker import watcher
@@ -309,7 +309,7 @@ class QueueWorker(orm.Model):
     def _assign_jobs(self, cr, uid, max_jobs=None, context=None):
         sql = ("SELECT id FROM queue_job "
                "WHERE worker_id IS NULL "
-               "AND state not in ('failed', 'done') "
+               "AND state in %s"
                "AND active = true "
                "ORDER BY eta NULLS LAST, priority, date_created ")
         if max_jobs is not None:
@@ -321,7 +321,7 @@ class QueueWorker(orm.Model):
         worker = watcher.worker_for_db(cr.dbname)
         cr.execute("SAVEPOINT queue_assign_jobs")
         try:
-            cr.execute(sql, log_exceptions=False)
+            cr.execute(sql, [(PENDING, ENQUEUED, STARTED)], log_exceptions=False)
         except Exception:
             # Here it's likely that the FOR UPDATE NOWAIT failed to get
             # the LOCK, so we ROLLBACK to the SAVEPOINT to restore the
