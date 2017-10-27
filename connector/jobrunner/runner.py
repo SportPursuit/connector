@@ -90,7 +90,7 @@ import requests
 
 import openerp
 
-from .channels import ChannelManager, PENDING, ENQUEUED, NOT_DONE
+from .channels import ChannelManager, PENDING, ENQUEUED, NOT_DONE, STARTED
 
 SELECT_TIMEOUT = 60
 ERROR_RECOVERY_DELAY = 5
@@ -217,6 +217,16 @@ class Database(object):
                        "WHERE uuid=%s",
                        (ENQUEUED, uuid))
 
+    def reset_started_jobs(self):
+
+        jobs = [job[1] for job in self.select_jobs('state = %s', (STARTED, ))]
+
+        if jobs:
+            _logger.info('Found %s jobs in \'started\' state: %s', len(jobs), ', '.join(jobs))
+
+            with closing(self.conn.cursor()) as cr:
+                cr.execute("UPDATE queue_job SET state=%s WHERE uuid in %s", (PENDING, tuple(jobs)))
+
 
 class ConnectorRunner(object):
 
@@ -255,6 +265,9 @@ class ConnectorRunner(object):
                 _logger.debug('connector is not installed for db %s', db_name)
             else:
                 self.db_by_name[db_name] = db
+
+                db.reset_started_jobs()
+
                 for job_data in db.select_jobs('state in %s', (NOT_DONE,)):
                     self.channel_manager.notify(db_name, *job_data)
                 _logger.info('connector runner ready for db %s', db_name)
