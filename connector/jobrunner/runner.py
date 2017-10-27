@@ -219,10 +219,10 @@ class Database(object):
 
     def reset_started_jobs(self):
 
-        jobs = [job[1] for job in self.select_jobs('state = %s', (STARTED, ))]
+        jobs = [job[1] for job in self.select_jobs('state in %s', ((STARTED, ENQUEUED), ))]
 
         if jobs:
-            _logger.info('Found %s jobs in \'started\' state: %s', len(jobs), ', '.join(jobs))
+            _logger.info('Found %s jobs in started/pending state: %s', len(jobs), ', '.join(jobs))
 
             with closing(self.conn.cursor()) as cr:
                 cr.execute("UPDATE queue_job SET state=%s WHERE uuid in %s", (PENDING, tuple(jobs)))
