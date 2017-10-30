@@ -262,6 +262,33 @@ class QueueJob(orm.Model):
             cr.commit()
         return True
 
+    def check_stuck_jobs(self, cr, uid, context=None):
+        """ Re-queues jobs that have been running for longer than the worker timeout as they are deemed to be stuck
+
+            Called from a cron.
+        """
+        timeout = tools.config['limit_time_real']
+
+        if not timeout:
+            _logger.warning('Skipping check for stuck jobs - no timeout configured.')
+            return True
+
+        cutoff = datetime.now() - timedelta(seconds=timeout)
+
+        jobs = self.search(cr, uid, [
+            ('date_started', '<=', cutoff.strftime(DEFAULT_SERVER_DATETIME_FORMAT)),
+            ('state', '=', STARTED)
+        ])
+
+        for job in self.browse(cr, uid, jobs):
+            _logger.error(
+                'Job %s has not completed after running for more than %s seconds. Re-queuing.', job.uuid, timeout
+            )
+
+        self.requeue(cr, uid, jobs, context=context)
+
+        return True
+
 
 class QueueWorker(orm.Model):
     """ Worker """
